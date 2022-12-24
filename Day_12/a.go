@@ -3,10 +3,21 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
-	"strconv"
 	"strings"
 )
+
+type coord struct {
+	row    int
+	column int
+}
+
+type square struct {
+	value   string
+	distace int
+	coords  coord
+}
 
 func A() {
 	file, err := os.Open("./input.txt")
@@ -18,93 +29,45 @@ func A() {
 	fileScanner := bufio.NewScanner(file)
 	fileScanner.Split(bufio.ScanLines)
 
-	distances := map[string]int{"0-0": 0}
-	// toVisit := []string{"0-0"}
-	visits := map[string]int{"0-0": 0}
-	grid, _, end := parseInput(fileScanner)
+	grid, start, end := parseInputs(fileScanner)
+	grid[start.row][start.column].distace = 0
 
-	count := 0
+	toVisit := []coord{start}
 
-	for calculateMapLength(visits) != 0 {
+	for {
+		node := toVisit[0]
+		cuurentSquare := grid[node.row][node.column]
+		// fmt.Println("Current Square: ", cuurentSquare)
+		distance := cuurentSquare.distace + 1
 
-		// get which node to explore next
-		currentVisits := deepCopyMap(visits)
-		for nodeKey, nodeVisited := range currentVisits {
-			if nodeVisited == 1 {
-				continue
-			}
-			// fmt.Println("Current Node", nodeKey)
-			currentDistance := distances[nodeKey]
-			currentNodeCoords := getCoords(nodeKey)
-			// get the nodes which are visitable
-			nextNode := getNextNode(grid, currentNodeCoords)
-			for _, node := range nextNode {
-				distance := currentDistance + 1
-				nodeKey := getKey(node)
-				if nodeDistance, exists := distances[nodeKey]; !exists {
-					distances[nodeKey] = distance
-					// first time visiting this node, so add it
-					visits[nodeKey] = 0
-					// toVisit = append(toVisit, nodeKey)
-				} else {
-					if distance < nodeDistance {
-						distances[nodeKey] = distance
-					}
-				}
-			}
-			// remove the current node from toVisit
-			// fmt.Println("Removing ", nodeKey)
-			visits[nodeKey] = 1
-			// toVisit = append(toVisit[:index], toVisit[index+1:]...)
+		if node.row == end.row && node.column == end.column {
+			distance := grid[node.row][node.column].distace
+			fmt.Println("Distance: ", distance)
+			break
 		}
-		count += 1
-		// fmt.Println("To Visits: ", visits)
-		// fmt.Println(distances)
+
+		nextNodes := getNextNodes(grid, node)
+		// fmt.Println("Possible moves: ", nextNodes)
+
+		for _, node := range nextNodes {
+			nodeSquare := getSqaure(grid, node)
+			// fmt.Println("NodeSquare : ", nodeSquare)
+			if distance < nodeSquare.distace {
+				// fmt.Println("Distance is less ", distance, node)
+				toVisit = append(toVisit, node)
+				grid[node.row][node.column].distace = distance
+			}
+		}
+
+		toVisit = toVisit[1:]
 		// fmt.Println()
-		// if count == 4 {
-		// 	break
-		// }
 	}
-
-	fmt.Println("Length to destination", distances[getKey(end)])
 }
 
-func deepCopyMap(maps map[string]int) map[string]int {
-	cp := make(map[string]int)
-	for k, v := range maps {
-		cp[k] = v
-	}
-	return cp
-}
-
-func calculateMapLength(visits map[string]int) int {
-	length := 0
-	for _, v := range visits {
-		if v == 0 {
-			length += 1
-		}
-	}
-	return length
-}
-
-func getCoords(node string) []int {
-	input := strings.Split(node, "-")
-	x, _ := strconv.Atoi(input[0])
-	y, _ := strconv.Atoi(input[1])
-	return []int{x, y}
-}
-
-func getKey(node []int) string {
-	xCoord := strconv.Itoa(node[0])
-	yCoord := strconv.Itoa(node[1])
-	str := xCoord + "-" + yCoord
-	return str
-}
-
-func getNextNode(grid [][]string, current []int) [][]int {
-	var nodes [][]int
+func getNextNodes(grid [][]square, current coord) []coord {
+	var nodes []coord
 	directions := []string{"U", "L", "D", "R"}
-	currentLetter := grid[current[0]][current[1]]
+	currentNode := grid[current.row][current.column]
 	// currentLetter = getRealValue(currentLetter)
 
 	for _, dir := range directions {
@@ -112,9 +75,9 @@ func getNextNode(grid [][]string, current []int) [][]int {
 		if !validPosition(grid, node) {
 			continue
 		}
-		nodeLetter := grid[node[0]][node[1]]
+		sq := grid[node.row][node.column]
 		// nodeLetter = getRealValue(nodeLetter)
-		if !possibleMove(currentLetter, nodeLetter) {
+		if !possibleMove(currentNode.value, sq.value) {
 			continue
 		}
 		nodes = append(nodes, node)
@@ -123,14 +86,9 @@ func getNextNode(grid [][]string, current []int) [][]int {
 
 }
 
-// func getRealValue(letter string) string {
-// 	if letter == "S" {
-// 		return "a"
-// 	} else if letter == "E" {
-// 		return "z"
-// 	}
-// 	return letter
-// }
+func getSqaure(grid [][]square, node coord) square {
+	return grid[node.row][node.column]
+}
 
 func possibleMove(current, node string) bool {
 	currentNumber := current[0]
@@ -138,53 +96,52 @@ func possibleMove(current, node string) bool {
 	return nodeNumber <= currentNumber+1
 }
 
-func validPosition(grid [][]string, node []int) bool {
+func validPosition(grid [][]square, node coord) bool {
 	rowLength := len(grid)
 	colLength := len(grid[0])
-	return node[0] >= 0 && node[1] >= 0 && node[0] <= rowLength-1 && node[1] <= colLength-1
+	return node.row >= 0 && node.column >= 0 && node.row < rowLength && node.column < colLength
 }
 
-func updatePosition(current []int, direction string) []int {
-	position := append([]int{}, current...)
+func updatePosition(position coord, direction string) coord {
 	switch direction {
 	case "R":
-		position[1] = position[1] + 1
+		position.column = position.column + 1
 	case "L":
-		position[1] = position[1] - 1
+		position.column = position.column - 1
 	case "U":
-		position[0] = position[0] - 1
+		position.row = position.row - 1
 	case "D":
-		position[0] = position[0] + 1
+		position.row = position.row + 1
 	}
 	// fmt.Println("Position: ", position)
 	return position
 }
 
-func parseInput(fileScanner *bufio.Scanner) ([][]string, []int, []int) {
+func parseInputs(fileScanner *bufio.Scanner) ([][]square, coord, coord) {
 
-	var grid [][]string
+	var grid [][]square
 	rowIndex := 0
 
-	var start []int
-	var end []int
+	var start coord
+	var end coord
 
 	for fileScanner.Scan() {
-		var row []string
+		var row []square
 		input := fileScanner.Text()
 		input = string(input)
 
 		letters := strings.Split(input, "")
 		for index, letter := range letters {
 			if letter == "S" {
-				start = append(start, rowIndex)
-				start = append(start, index)
+				start = coord{row: rowIndex, column: index}
 				letter = "a"
 			} else if letter == "E" {
-				end = append(end, rowIndex)
-				end = append(end, index)
+				end = coord{row: rowIndex, column: index}
 				letter = "z"
 			}
-			row = append(row, letter)
+			coords := coord{row: rowIndex, column: index}
+			temp := square{value: letter, coords: coords, distace: math.MaxUint32}
+			row = append(row, temp)
 		}
 		rowIndex += 1
 		grid = append(grid, row)
